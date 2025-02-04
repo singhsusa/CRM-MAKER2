@@ -50,7 +50,23 @@ export function ProductForm({ product }: ProductFormProps) {
     try {
       if (product) {
         // Update existing product
-        console.log('Updating product:', { id: product.id, ...formData })
+        const response = await fetch(`/api/products/${product.id}`, {
+          method: 'PUT',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify(formData),
+        })
+
+        if (!response.ok) {
+          throw new Error('Failed to update product')
+        }
+
+        const data = await response.json()
+        toast({
+          title: "Success",
+          description: "Product updated successfully",
+        })
       } else {
         // Create new product
         const response = await fetch('/api/products', {
@@ -79,7 +95,7 @@ export function ProductForm({ product }: ProductFormProps) {
       toast({
         variant: "destructive",
         title: "Error",
-        description: "Failed to create product",
+        description: product ? "Failed to update product" : "Failed to create product",
       })
     } finally {
       setLoading(false)
