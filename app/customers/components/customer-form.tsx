@@ -7,6 +7,7 @@ import { Textarea } from "@/components/ui/textarea"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { useState } from "react"
 import { useRouter } from "next/navigation"
+import { useToast } from "@/hooks/use-toast"
 
 type CustomerStatus = 'in-implementation' | 'on-hold' | 'live' | 'terminated'
 
@@ -27,6 +28,7 @@ interface CustomerFormProps {
 
 export function CustomerForm({ customer }: CustomerFormProps) {
   const router = useRouter()
+  const { toast } = useToast()
   const [loading, setLoading] = useState(false)
   
   // Initialize form state with customer data if editing, or empty values if creating
@@ -52,20 +54,53 @@ export function CustomerForm({ customer }: CustomerFormProps) {
     setLoading(true)
 
     try {
-      // This would be your API call
       if (customer) {
         // Update existing customer
-        console.log('Updating customer:', { id: customer.id, ...formData })
+        const response = await fetch(`/api/customers/${customer.id}`, {
+          method: 'PUT',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify(formData),
+        })
+
+        if (!response.ok) {
+          throw new Error('Failed to update customer')
+        }
+
+        toast({
+          title: "Success",
+          description: "Customer updated successfully",
+        })
       } else {
         // Create new customer
-        console.log('Creating customer:', formData)
+        const response = await fetch('/api/customers', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify(formData),
+        })
+
+        if (!response.ok) {
+          throw new Error('Failed to create customer')
+        }
+
+        toast({
+          title: "Success",
+          description: "Customer created successfully",
+        })
       }
 
-      // Redirect back to customers list after success
       router.push('/customers')
       router.refresh()
     } catch (error) {
       console.error('Error saving customer:', error)
+      toast({
+        variant: "destructive",
+        title: "Error",
+        description: customer ? "Failed to update customer" : "Failed to create customer",
+      })
     } finally {
       setLoading(false)
     }
