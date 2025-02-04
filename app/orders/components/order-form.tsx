@@ -6,15 +6,138 @@ import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { useState } from "react"
+import { useRouter } from "next/navigation"
+import { X } from "lucide-react"
 
-export function OrderForm() {
+type OrderStatus = 'pending' | 'kick-off' | 'implementation' | 'live' | 'on-hold' | 'canceled'
+type OrderTerm = 'monthly' | '1-year' | '2-year'
+
+type OrderProduct = {
+  id: string
+  productId: string
+  units: number
+  pricePerUnit: number
+}
+
+type Order = {
+  id: string
+  customerName: string
+  billingContact: {
+    name: string
+    email: string
+    address: string
+  }
+  term: OrderTerm
+  startDate: string
+  endDate: string
+  products: OrderProduct[]
+  oneTimeFee: number
+  accountExecutive: string
+  status: OrderStatus
+  orderDate: string
+  notes?: string
+}
+
+interface OrderFormProps {
+  order?: Order
+}
+
+export function OrderForm({ order }: OrderFormProps) {
+  const router = useRouter()
   const [loading, setLoading] = useState(false)
+
+  // Initialize form state with order data if editing, or empty values if creating
+  const [formData, setFormData] = useState({
+    customerName: order?.customerName ?? '',
+    billingContact: {
+      name: order?.billingContact.name ?? '',
+      email: order?.billingContact.email ?? '',
+      address: order?.billingContact.address ?? ''
+    },
+    term: order?.term ?? 'monthly',
+    startDate: order?.startDate ?? '',
+    endDate: order?.endDate ?? '',
+    oneTimeFee: order?.oneTimeFee ?? 0,
+    accountExecutive: order?.accountExecutive ?? '',
+    status: order?.status ?? 'pending',
+    notes: order?.notes ?? ''
+  })
+
+  const [products, setProducts] = useState<OrderProduct[]>(
+    order?.products ?? [{ id: '1', productId: '', units: 1, pricePerUnit: 0 }]
+  )
+
+  const updateField = (field: string, value: any) => {
+    setFormData(prev => ({
+      ...prev,
+      [field]: value
+    }))
+  }
+
+  const updateBillingContact = (field: string, value: string) => {
+    setFormData(prev => ({
+      ...prev,
+      billingContact: {
+        ...prev.billingContact,
+        [field]: value
+      }
+    }))
+  }
+
+  const addProduct = () => {
+    setProducts([
+      ...products,
+      { id: crypto.randomUUID(), productId: '', units: 1, pricePerUnit: 0 }
+    ])
+  }
+
+  const removeProduct = (id: string) => {
+    if (products.length > 1) {
+      setProducts(products.filter(p => p.id !== id))
+    }
+  }
+
+  const updateProduct = (id: string, field: keyof OrderProduct, value: string | number) => {
+    setProducts(products.map(product => {
+      if (product.id === id) {
+        return { ...product, [field]: value }
+      }
+      return product
+    }))
+  }
+
+  const calculateTotal = () => {
+    return products.reduce((total, product) => {
+      return total + (product.units * product.pricePerUnit)
+    }, 0)
+  }
 
   const onSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     setLoading(true)
-    // Add your form submission logic here
-    setLoading(false)
+
+    try {
+      const orderData = {
+        ...formData,
+        products,
+        totalValue: calculateTotal() + formData.oneTimeFee
+      }
+
+      if (order) {
+        // Update existing order
+        console.log('Updating order:', { id: order.id, ...orderData })
+      } else {
+        // Create new order
+        console.log('Creating order:', orderData)
+      }
+
+      router.push('/orders')
+      router.refresh()
+    } catch (error) {
+      console.error('Error saving order:', error)
+    } finally {
+      setLoading(false)
+    }
   }
 
   return (
@@ -68,39 +191,84 @@ export function OrderForm() {
 
         <div className="grid grid-cols-2 gap-4">
           <div className="grid gap-2">
-            <Label htmlFor="startDate">Start Date</Label>
+            <Label htmlFor="startDate">Term Start Date</Label>
             <Input id="startDate" type="date" required />
           </div>
           <div className="grid gap-2">
-            <Label htmlFor="endDate">End Date</Label>
+            <Label htmlFor="endDate">Term End Date</Label>
             <Input id="endDate" type="date" required />
           </div>
         </div>
 
         {/* Products Section */}
         <div className="space-y-4">
-          <h3 className="font-medium">Products</h3>
-          <div className="grid gap-2">
-            <Label htmlFor="product">Product</Label>
-            <Select>
-              <SelectTrigger>
-                <SelectValue placeholder="Select product" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="basic">Basic Plan</SelectItem>
-                {/* Add more products */}
-              </SelectContent>
-            </Select>
+          <div className="flex justify-between items-center">
+            <h3 className="font-medium">Products</h3>
+            <Button type="button" variant="outline" onClick={addProduct}>
+              Add Product
+            </Button>
           </div>
-          <div className="grid grid-cols-2 gap-4">
-            <div className="grid gap-2">
-              <Label htmlFor="units">Number of Units</Label>
-              <Input id="units" type="number" min="1" required />
+
+          {products.map((product, index) => (
+            <div key={product.id} className="space-y-4 p-4 border rounded-lg relative">
+              {products.length > 1 && (
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="icon"
+                  className="absolute right-2 top-2"
+                  onClick={() => removeProduct(product.id)}
+                >
+                  <X className="h-4 w-4" />
+                </Button>
+              )}
+              
+              <div className="grid gap-2">
+                <Label>Product {index + 1}</Label>
+                <Select
+                  onValueChange={(value) => updateProduct(product.id, 'productId', value)}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="Select product" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="basic">Basic Plan</SelectItem>
+                    {/* Add more products */}
+                  </SelectContent>
+                </Select>
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                <div className="grid gap-2">
+                  <Label>Number of Units</Label>
+                  <Input
+                    type="number"
+                    min="1"
+                    value={product.units}
+                    onChange={(e) => updateProduct(product.id, 'units', parseInt(e.target.value))}
+                    required
+                  />
+                </div>
+                <div className="grid gap-2">
+                  <Label>Price per Unit</Label>
+                  <Input
+                    type="number"
+                    step="0.01"
+                    value={product.pricePerUnit}
+                    onChange={(e) => updateProduct(product.id, 'pricePerUnit', parseFloat(e.target.value))}
+                    required
+                  />
+                </div>
+              </div>
+
+              <div className="text-right text-sm text-gray-600">
+                Subtotal: ${(product.units * product.pricePerUnit).toFixed(2)}
+              </div>
             </div>
-            <div className="grid gap-2">
-              <Label htmlFor="pricePerUnit">Price per Unit</Label>
-              <Input id="pricePerUnit" type="number" step="0.01" required />
-            </div>
+          ))}
+
+          <div className="text-right font-medium">
+            Total Products Value: ${calculateTotal().toFixed(2)}
           </div>
         </div>
 
@@ -137,9 +305,18 @@ export function OrderForm() {
         </div>
       </div>
 
-      <Button type="submit" disabled={loading}>
-        {loading ? 'Creating...' : 'Create Order'}
-      </Button>
+      <div className="flex gap-4">
+        <Button type="submit" disabled={loading}>
+          {loading ? 'Saving...' : order ? 'Update Order' : 'Create Order'}
+        </Button>
+        <Button
+          type="button"
+          variant="outline"
+          onClick={() => router.push('/orders')}
+        >
+          Cancel
+        </Button>
+      </div>
     </form>
   )
 } 
