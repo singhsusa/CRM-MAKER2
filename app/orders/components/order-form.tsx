@@ -8,6 +8,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { useState } from "react"
 import { useRouter } from "next/navigation"
 import { X } from "lucide-react"
+import { useToast } from "@/hooks/use-toast"
 
 type OrderStatus = 'pending' | 'kick-off' | 'implementation' | 'live' | 'on-hold' | 'canceled'
 type OrderTerm = 'monthly' | '1-year' | '2-year'
@@ -44,6 +45,7 @@ interface OrderFormProps {
 
 export function OrderForm({ order }: OrderFormProps) {
   const router = useRouter()
+  const { toast } = useToast()
   const [loading, setLoading] = useState(false)
 
   // Initialize form state with order data if editing, or empty values if creating
@@ -125,16 +127,51 @@ export function OrderForm({ order }: OrderFormProps) {
 
       if (order) {
         // Update existing order
-        console.log('Updating order:', { id: order.id, ...orderData })
+        const response = await fetch(`/api/orders/${order.id}`, {
+          method: 'PUT',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify(orderData),
+        })
+
+        if (!response.ok) {
+          throw new Error('Failed to update order')
+        }
+
+        toast({
+          title: "Success",
+          description: "Order updated successfully",
+        })
       } else {
         // Create new order
-        console.log('Creating order:', orderData)
+        const response = await fetch('/api/orders', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify(orderData),
+        })
+
+        if (!response.ok) {
+          throw new Error('Failed to create order')
+        }
+
+        toast({
+          title: "Success",
+          description: "Order created successfully",
+        })
       }
 
       router.push('/orders')
       router.refresh()
     } catch (error) {
       console.error('Error saving order:', error)
+      toast({
+        variant: "destructive",
+        title: "Error",
+        description: order ? "Failed to update order" : "Failed to create order",
+      })
     } finally {
       setLoading(false)
     }
