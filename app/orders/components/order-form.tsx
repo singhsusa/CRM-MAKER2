@@ -7,7 +7,7 @@ import { Textarea } from "@/components/ui/textarea"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { useState, useEffect } from "react"
 import { useRouter } from "next/navigation"
-import { X } from "lucide-react"
+import { X, Loader2 } from "lucide-react"
 import { useToast } from "@/hooks/use-toast"
 import { Customer, Product } from "@prisma/client"
 
@@ -71,6 +71,8 @@ export function OrderForm({ order }: OrderFormProps) {
     notes: order?.notes ?? ''
   })
 
+  const [isDirty, setIsDirty] = useState(false)
+
   // Fetch customers and products when component mounts
   useEffect(() => {
     const fetchData = async () => {
@@ -103,6 +105,7 @@ export function OrderForm({ order }: OrderFormProps) {
   }, [toast])
 
   const updateField = (field: string, value: any) => {
+    setIsDirty(true)
     setFormData(prev => ({
       ...prev,
       [field]: value
@@ -225,7 +228,6 @@ export function OrderForm({ order }: OrderFormProps) {
         customerId: formData.customerId,
         billingContact: formData.billingContact,
         term: formData.term,
-        // Convert dates safely
         startDate: formData.startDate ? new Date(formData.startDate).toISOString() : undefined,
         endDate: formData.endDate ? new Date(formData.endDate).toISOString() : undefined,
         oneTimeFee: Number(formData.oneTimeFee),
@@ -239,10 +241,12 @@ export function OrderForm({ order }: OrderFormProps) {
         }))
       }
 
-      console.log('Submitting order data:', orderData)
-
-      const response = await fetch('/api/orders', {
-        method: 'POST',
+      const url = order 
+        ? `/api/orders/${order.id}` 
+        : '/api/orders'
+      
+      const response = await fetch(url, {
+        method: order ? 'PUT' : 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
@@ -251,12 +255,12 @@ export function OrderForm({ order }: OrderFormProps) {
 
       if (!response.ok) {
         const error = await response.json()
-        throw new Error(error.message || 'Failed to create order')
+        throw new Error(error.message || `Failed to ${order ? 'update' : 'create'} order`)
       }
 
       toast({
         title: "Success",
-        description: "Order created successfully",
+        description: `Order ${order ? 'updated' : 'created'} successfully`,
       })
 
       router.push('/orders')
@@ -271,6 +275,13 @@ export function OrderForm({ order }: OrderFormProps) {
     } finally {
       setLoading(false)
     }
+  }
+
+  const handleCancel = () => {
+    if (isDirty && !window.confirm('You have unsaved changes. Are you sure you want to leave?')) {
+      return
+    }
+    router.push('/orders')
   }
 
   return (
@@ -489,18 +500,29 @@ export function OrderForm({ order }: OrderFormProps) {
 
         <div className="grid gap-2">
           <Label htmlFor="notes">Special Notes</Label>
-          <Textarea id="notes" />
+          <Textarea 
+            id="notes"
+            value={formData.notes}
+            onChange={(e) => updateField('notes', e.target.value)}
+          />
         </div>
       </div>
 
       <div className="flex gap-4">
         <Button type="submit" disabled={loading}>
-          {loading ? 'Saving...' : order ? 'Update Order' : 'Create Order'}
+          {loading ? (
+            <>
+              <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+              {order ? 'Updating...' : 'Creating...'}
+            </>
+          ) : (
+            order ? 'Update Order' : 'Create Order'
+          )}
         </Button>
         <Button
           type="button"
           variant="outline"
-          onClick={() => router.push('/orders')}
+          onClick={handleCancel}
         >
           Cancel
         </Button>

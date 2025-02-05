@@ -7,16 +7,9 @@ import { Textarea } from "@/components/ui/textarea"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { useState } from "react"
 import { useRouter } from "next/navigation"
+import { Loader2 } from "lucide-react"
 import { useToast } from "@/hooks/use-toast"
-
-type Product = {
-  id: string
-  name: string
-  description: string
-  category: string
-  price: number
-  status: 'active' | 'inactive'
-}
+import { Product } from "@prisma/client"
 
 interface ProductFormProps {
   product?: Product
@@ -26,9 +19,9 @@ export function ProductForm({ product }: ProductFormProps) {
   const router = useRouter()
   const { toast } = useToast()
   const [loading, setLoading] = useState(false)
-  
-  // Initialize form state with product data if editing, or empty values if creating
-  const [formData, setFormData] = useState<Omit<Product, 'id'>>({
+  const [isDirty, setIsDirty] = useState(false)
+
+  const [formData, setFormData] = useState({
     name: product?.name ?? '',
     description: product?.description ?? '',
     category: product?.category ?? '',
@@ -36,11 +29,19 @@ export function ProductForm({ product }: ProductFormProps) {
     status: product?.status ?? 'active'
   })
 
-  const updateField = (field: keyof Omit<Product, 'id'>, value: string | number) => {
+  const updateField = (field: string, value: any) => {
+    setIsDirty(true)
     setFormData(prev => ({
       ...prev,
       [field]: value
     }))
+  }
+
+  const handleCancel = () => {
+    if (isDirty && !window.confirm('You have unsaved changes. Are you sure you want to leave?')) {
+      return
+    }
+    router.push('/products')
   }
 
   const onSubmit = async (e: React.FormEvent) => {
@@ -48,45 +49,27 @@ export function ProductForm({ product }: ProductFormProps) {
     setLoading(true)
 
     try {
-      if (product) {
-        // Update existing product
-        const response = await fetch(`/api/products/${product.id}`, {
-          method: 'PUT',
-          headers: {
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify(formData),
-        })
+      const url = product 
+        ? `/api/products/${product.id}` 
+        : '/api/products'
+      
+      const response = await fetch(url, {
+        method: product ? 'PUT' : 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(formData),
+      })
 
-        if (!response.ok) {
-          throw new Error('Failed to update product')
-        }
-
-        const data = await response.json()
-        toast({
-          title: "Success",
-          description: "Product updated successfully",
-        })
-      } else {
-        // Create new product
-        const response = await fetch('/api/products', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify(formData),
-        })
-
-        if (!response.ok) {
-          throw new Error('Failed to create product')
-        }
-
-        const data = await response.json()
-        toast({
-          title: "Success",
-          description: "Product created successfully",
-        })
+      if (!response.ok) {
+        const error = await response.json()
+        throw new Error(error.message || `Failed to ${product ? 'update' : 'create'} product`)
       }
+
+      toast({
+        title: "Success",
+        description: `Product ${product ? 'updated' : 'created'} successfully`,
+      })
 
       router.push('/products')
       router.refresh()
@@ -95,7 +78,7 @@ export function ProductForm({ product }: ProductFormProps) {
       toast({
         variant: "destructive",
         title: "Error",
-        description: product ? "Failed to update product" : "Failed to create product",
+        description: error instanceof Error ? error.message : "Failed to save product",
       })
     } finally {
       setLoading(false)
@@ -106,7 +89,7 @@ export function ProductForm({ product }: ProductFormProps) {
     <form onSubmit={onSubmit} className="space-y-8">
       <div className="space-y-4">
         <div className="grid gap-2">
-          <Label htmlFor="name">Product Name</Label>
+          <Label htmlFor="name">Name</Label>
           <Input
             id="name"
             value={formData.name}
@@ -173,12 +156,19 @@ export function ProductForm({ product }: ProductFormProps) {
 
       <div className="flex gap-4">
         <Button type="submit" disabled={loading}>
-          {loading ? 'Saving...' : product ? 'Update Product' : 'Create Product'}
+          {loading ? (
+            <>
+              <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+              {product ? 'Updating...' : 'Creating...'}
+            </>
+          ) : (
+            product ? 'Update Product' : 'Create Product'
+          )}
         </Button>
         <Button
           type="button"
           variant="outline"
-          onClick={() => router.push('/products')}
+          onClick={handleCancel}
         >
           Cancel
         </Button>

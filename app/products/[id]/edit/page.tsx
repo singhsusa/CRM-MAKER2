@@ -1,36 +1,17 @@
 import { ProductForm } from "../../components/product-form"
+import { productRepository } from "@/lib/repositories/product.repository"
 import { notFound } from "next/navigation"
 
-// This would normally fetch the product data from your API
-const getProduct = async (id: string) => {
-  try {
-    // Simulate API call
-    await new Promise(resolve => setTimeout(resolve, 500))
-    
-    // This would be your database call
-    // For now, returning mock data
-    return {
-      id,
-      name: 'Basic Plan',
-      description: 'Entry level product',
-      category: 'subscription',
-      price: 99.99,
-      status: 'active' as const
-    }
-  } catch (error) {
-    return null
+export default async function EditProductPage({ 
+  params 
+}: { 
+  params: { id: string } 
+}) {
+  const product = await productRepository.findById(params.id)
+  
+  if (!product) {
+    notFound()
   }
-}
-
-export default async function EditProductPage({ params }: { params: { id: string } }) {
-    // Ensure params is awaited
-    const { id } = await params; // Explicitly awaiting params
-  
-    const product = await getProduct(id);
-  
-    if (!product) {
-      notFound();
-    }
 
   return (
     <div className="space-y-6">

@@ -19,4 +19,26 @@ export async function PUT(
       { status: 500 }
     )
   }
+}
+
+export async function GET(
+  request: Request,
+  { params }: { params: { id: string } }
+) {
+  try {
+    const customer = await customerRepository.findById(params.id)
+    if (!customer) {
+      return NextResponse.json(
+        { error: 'Customer not found' },
+        { status: 404 }
+      )
+    }
+    return NextResponse.json(customer)
+  } catch (error) {
+    console.error('Error fetching customer:', error)
+    return NextResponse.json(
+      { error: 'Failed to fetch customer' },
+      { status: 500 }
+    )
+  }
 } 
