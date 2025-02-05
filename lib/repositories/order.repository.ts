@@ -21,13 +21,14 @@ export class OrderRepository extends BaseRepository {
       pricePerUnit: number
     }[]
   }) {
+    console.log('Creating order with data:', data)
     return this.prisma.order.create({
       data: {
         customerId: data.customerId,
         billingContact: data.billingContact,
         term: data.term,
-        startDate: data.startDate,
-        endDate: data.endDate,
+        startDate: new Date(data.startDate),
+        endDate: new Date(data.endDate),
         oneTimeFee: data.oneTimeFee,
         accountExecutive: data.accountExecutive,
         status: data.status,

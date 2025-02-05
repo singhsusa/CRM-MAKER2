@@ -5,10 +5,11 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import { useRouter } from "next/navigation"
 import { X } from "lucide-react"
 import { useToast } from "@/hooks/use-toast"
+import { Customer, Product } from "@prisma/client"
 
 type OrderStatus = 'pending' | 'kick-off' | 'implementation' | 'live' | 'on-hold' | 'canceled'
 type OrderTerm = 'monthly' | '1-year' | '2-year'
@@ -47,10 +48,15 @@ export function OrderForm({ order }: OrderFormProps) {
   const router = useRouter()
   const { toast } = useToast()
   const [loading, setLoading] = useState(false)
+  const [customers, setCustomers] = useState<Customer[]>([])
+  const [products, setProducts] = useState<Product[]>([])
+  const [orderProducts, setOrderProducts] = useState<OrderProduct[]>(
+    order?.products ?? [{ id: '1', productId: '', units: 1, pricePerUnit: 0 }]
+  )
 
   // Initialize form state with order data if editing, or empty values if creating
   const [formData, setFormData] = useState({
-    customerName: order?.customerName ?? '',
+    customerId: order?.customerId ?? '',
     billingContact: {
       name: order?.billingContact.name ?? '',
       email: order?.billingContact.email ?? '',
@@ -65,9 +71,36 @@ export function OrderForm({ order }: OrderFormProps) {
     notes: order?.notes ?? ''
   })
 
-  const [products, setProducts] = useState<OrderProduct[]>(
-    order?.products ?? [{ id: '1', productId: '', units: 1, pricePerUnit: 0 }]
-  )
+  // Fetch customers and products when component mounts
+  useEffect(() => {
+    const fetchData = async () => {
+      try {
+        const [customersRes, productsRes] = await Promise.all([
+          fetch('/api/customers'),
+          fetch('/api/products')
+        ])
+        
+        if (!customersRes.ok || !productsRes.ok) {
+          throw new Error('Failed to fetch data')
+        }
+
+        const customersData = await customersRes.json()
+        const productsData = await productsRes.json()
+
+        setCustomers(customersData)
+        setProducts(productsData)
+      } catch (error) {
+        console.error('Error fetching data:', error)
+        toast({
+          variant: "destructive",
+          title: "Error",
+          description: "Failed to load customers and products"
+        })
+      }
+    }
+
+    fetchData()
+  }, [toast])
 
   const updateField = (field: string, value: any) => {
     setFormData(prev => ({
@@ -87,20 +120,20 @@ export function OrderForm({ order }: OrderFormProps) {
   }
 
   const addProduct = () => {
-    setProducts([
-      ...products,
+    setOrderProducts([
+      ...orderProducts,
       { id: crypto.randomUUID(), productId: '', units: 1, pricePerUnit: 0 }
     ])
   }
 
   const removeProduct = (id: string) => {
-    if (products.length > 1) {
-      setProducts(products.filter(p => p.id !== id))
+    if (orderProducts.length > 1) {
+      setOrderProducts(orderProducts.filter(p => p.id !== id))
     }
   }
 
   const updateProduct = (id: string, field: keyof OrderProduct, value: string | number) => {
-    setProducts(products.map(product => {
+    setOrderProducts(orderProducts.map(product => {
       if (product.id === id) {
         return { ...product, [field]: value }
       }
@@ -109,7 +142,7 @@ export function OrderForm({ order }: OrderFormProps) {
   }
 
   const calculateTotal = () => {
-    return products.reduce((total, product) => {
+    return orderProducts.reduce((total, product) => {
       return total + (product.units * product.pricePerUnit)
     }, 0)
   }
@@ -119,49 +152,57 @@ export function OrderForm({ order }: OrderFormProps) {
     setLoading(true)
 
     try {
+      // Validate required fields first
+      if (!formData.customerId) {
+        throw new Error('Please select a customer')
+      }
+      if (!formData.startDate || !formData.endDate) {
+        throw new Error('Please select both start and end dates')
+      }
+      if (!formData.billingContact.name || !formData.billingContact.email || !formData.billingContact.address) {
+        throw new Error('Please fill in all billing contact details')
+      }
+      if (orderProducts.some(p => !p.productId)) {
+        throw new Error('Please select products for all line items')
+      }
+
       const orderData = {
-        ...formData,
-        products,
-        totalValue: calculateTotal() + formData.oneTimeFee
+        customerId: formData.customerId,
+        billingContact: formData.billingContact,
+        term: formData.term,
+        // Convert dates safely
+        startDate: formData.startDate ? new Date(formData.startDate).toISOString() : undefined,
+        endDate: formData.endDate ? new Date(formData.endDate).toISOString() : undefined,
+        oneTimeFee: Number(formData.oneTimeFee),
+        accountExecutive: formData.accountExecutive,
+        status: formData.status,
+        notes: formData.notes,
+        products: orderProducts.map(p => ({
+          productId: p.productId,
+          units: Number(p.units),
+          pricePerUnit: Number(p.pricePerUnit)
+        }))
       }
 
-      if (order) {
-        // Update existing order
-        const response = await fetch(`/api/orders/${order.id}`, {
-          method: 'PUT',
-          headers: {
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify(orderData),
-        })
+      console.log('Submitting order data:', orderData)
 
-        if (!response.ok) {
-          throw new Error('Failed to update order')
-        }
+      const response = await fetch('/api/orders', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(orderData),
+      })
 
-        toast({
-          title: "Success",
-          description: "Order updated successfully",
-        })
-      } else {
-        // Create new order
-        const response = await fetch('/api/orders', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify(orderData),
-        })
-
-        if (!response.ok) {
-          throw new Error('Failed to create order')
-        }
-
-        toast({
-          title: "Success",
-          description: "Order created successfully",
-        })
+      if (!response.ok) {
+        const error = await response.json()
+        throw new Error(error.message || 'Failed to create order')
       }
+
+      toast({
+        title: "Success",
+        description: "Order created successfully",
+      })
 
       router.push('/orders')
       router.refresh()
@@ -170,7 +211,7 @@ export function OrderForm({ order }: OrderFormProps) {
       toast({
         variant: "destructive",
         title: "Error",
-        description: order ? "Failed to update order" : "Failed to create order",
+        description: "Failed to create order",
       })
     } finally {
       setLoading(false)
@@ -180,16 +221,21 @@ export function OrderForm({ order }: OrderFormProps) {
   return (
     <form onSubmit={onSubmit} className="space-y-8">
       <div className="space-y-4">
-        {/* Customer Selection */}
         <div className="grid gap-2">
-          <Label htmlFor="customer">Customer</Label>
-          <Select>
+          <Label>Customer</Label>
+          <Select
+            value={formData.customerId}
+            onValueChange={(value) => updateField('customerId', value)}
+          >
             <SelectTrigger>
               <SelectValue placeholder="Select customer" />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value="acme">Acme Corp</SelectItem>
-              {/* Add more customers */}
+              {customers.map((customer) => (
+                <SelectItem key={customer.id} value={customer.id}>
+                  {customer.companyName}
+                </SelectItem>
+              ))}
             </SelectContent>
           </Select>
         </div>
@@ -199,22 +245,41 @@ export function OrderForm({ order }: OrderFormProps) {
           <h3 className="font-medium">Billing Contact</h3>
           <div className="grid gap-2">
             <Label htmlFor="billingName">Contact Name</Label>
-            <Input id="billingName" required />
+            <Input 
+              id="billingName" 
+              value={formData.billingContact.name}
+              onChange={(e) => updateBillingContact('name', e.target.value)}
+              required 
+            />
           </div>
           <div className="grid gap-2">
             <Label htmlFor="billingEmail">Contact Email</Label>
-            <Input id="billingEmail" type="email" required />
+            <Input 
+              id="billingEmail" 
+              type="email"
+              value={formData.billingContact.email}
+              onChange={(e) => updateBillingContact('email', e.target.value)}
+              required 
+            />
           </div>
           <div className="grid gap-2">
             <Label htmlFor="billingAddress">Contact Address</Label>
-            <Textarea id="billingAddress" required />
+            <Textarea 
+              id="billingAddress"
+              value={formData.billingContact.address}
+              onChange={(e) => updateBillingContact('address', e.target.value)}
+              required 
+            />
           </div>
         </div>
 
         {/* Order Details */}
         <div className="grid gap-2">
           <Label htmlFor="term">Order Term</Label>
-          <Select>
+          <Select
+            value={formData.term}
+            onValueChange={(value) => updateField('term', value)}
+          >
             <SelectTrigger>
               <SelectValue placeholder="Select term" />
             </SelectTrigger>
@@ -229,11 +294,23 @@ export function OrderForm({ order }: OrderFormProps) {
         <div className="grid grid-cols-2 gap-4">
           <div className="grid gap-2">
             <Label htmlFor="startDate">Term Start Date</Label>
-            <Input id="startDate" type="date" required />
+            <Input 
+              id="startDate" 
+              type="date" 
+              value={formData.startDate}
+              onChange={(e) => updateField('startDate', e.target.value)}
+              required 
+            />
           </div>
           <div className="grid gap-2">
             <Label htmlFor="endDate">Term End Date</Label>
-            <Input id="endDate" type="date" required />
+            <Input 
+              id="endDate" 
+              type="date"
+              value={formData.endDate}
+              onChange={(e) => updateField('endDate', e.target.value)}
+              required 
+            />
           </div>
         </div>
 
@@ -246,9 +323,9 @@ export function OrderForm({ order }: OrderFormProps) {
             </Button>
           </div>
 
-          {products.map((product, index) => (
+          {orderProducts.map((product, index) => (
             <div key={product.id} className="space-y-4 p-4 border rounded-lg relative">
-              {products.length > 1 && (
+              {orderProducts.length > 1 && (
                 <Button
                   type="button"
                   variant="ghost"
@@ -263,14 +340,18 @@ export function OrderForm({ order }: OrderFormProps) {
               <div className="grid gap-2">
                 <Label>Product {index + 1}</Label>
                 <Select
+                  value={product.productId}
                   onValueChange={(value) => updateProduct(product.id, 'productId', value)}
                 >
                   <SelectTrigger>
                     <SelectValue placeholder="Select product" />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="basic">Basic Plan</SelectItem>
-                    {/* Add more products */}
+                    {products.map((product) => (
+                      <SelectItem key={product.id} value={product.id}>
+                        {product.name} - ${product.price}
+                      </SelectItem>
+                    ))}
                   </SelectContent>
                 </Select>
               </div>
@@ -311,17 +392,32 @@ export function OrderForm({ order }: OrderFormProps) {
 
         <div className="grid gap-2">
           <Label htmlFor="oneTimeFee">One Time Fee</Label>
-          <Input id="oneTimeFee" type="number" step="0.01" defaultValue="0" />
+          <Input 
+            id="oneTimeFee" 
+            type="number" 
+            step="0.01" 
+            value={formData.oneTimeFee}
+            onChange={(e) => updateField('oneTimeFee', parseFloat(e.target.value))}
+            required 
+          />
         </div>
 
         <div className="grid gap-2">
           <Label htmlFor="accountExecutive">Account Executive</Label>
-          <Input id="accountExecutive" required />
+          <Input 
+            id="accountExecutive" 
+            value={formData.accountExecutive}
+            onChange={(e) => updateField('accountExecutive', e.target.value)}
+            required 
+          />
         </div>
 
         <div className="grid gap-2">
           <Label htmlFor="status">Order Status</Label>
-          <Select>
+          <Select
+            value={formData.status}
+            onValueChange={(value) => updateField('status', value)}
+          >
             <SelectTrigger>
               <SelectValue placeholder="Select status" />
             </SelectTrigger>
