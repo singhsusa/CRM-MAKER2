@@ -1,20 +1,12 @@
 import { NextResponse } from 'next/server'
+import { customerRepository } from '@/lib/repositories/customer.repository'
 
 export async function POST(request: Request) {
   try {
-    const customer = await request.json()
+    const data = await request.json()
+    const customer = await customerRepository.create(data)
     
-    // This would be your database call
-    console.log('Creating customer:', customer)
-
-    // Simulate API delay
-    await new Promise(resolve => setTimeout(resolve, 500))
-
-    // Return the created customer
-    return NextResponse.json({ 
-      id: crypto.randomUUID(),
-      ...customer 
-    })
+    return NextResponse.json(customer)
   } catch (error) {
     console.error('Error creating customer:', error)
     return NextResponse.json(

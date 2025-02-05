@@ -1,21 +1,12 @@
 import { NextResponse } from 'next/server'
+import { orderRepository } from '@/lib/repositories/order.repository'
 
 export async function POST(request: Request) {
   try {
-    const order = await request.json()
+    const data = await request.json()
+    const order = await orderRepository.create(data)
     
-    // This would be your database call
-    console.log('Creating order:', order)
-
-    // Simulate API delay
-    await new Promise(resolve => setTimeout(resolve, 500))
-
-    // Return the created order
-    return NextResponse.json({ 
-      id: crypto.randomUUID(),
-      orderDate: new Date().toISOString(),
-      ...order 
-    })
+    return NextResponse.json(order)
   } catch (error) {
     console.error('Error creating order:', error)
     return NextResponse.json(

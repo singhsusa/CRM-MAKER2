@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server'
+import { customerRepository } from '@/lib/repositories/customer.repository'
 
 export async function PUT(
   request: Request,
@@ -8,17 +9,9 @@ export async function PUT(
     const id = params.id
     const updates = await request.json()
     
-    // This would be your database call
-    console.log('Updating customer:', { id, ...updates })
-
-    // Simulate API delay
-    await new Promise(resolve => setTimeout(resolve, 500))
-
-    // Return the updated customer
-    return NextResponse.json({ 
-      id,
-      ...updates
-    })
+    const customer = await customerRepository.update(id, updates)
+    
+    return NextResponse.json(customer)
   } catch (error) {
     console.error('Error updating customer:', error)
     return NextResponse.json(
