@@ -1,5 +1,6 @@
 'use client'
 
+import { Order, Customer, OrderProduct, Product } from '@prisma/client'
 import {
   Table,
   TableBody,
@@ -9,109 +10,97 @@ import {
   TableRow,
 } from "@/components/ui/table"
 import { Button } from "@/components/ui/button"
-import Link from "next/link"
+import { useRouter } from "next/navigation"
+import { useState } from "react"
 
-type OrderStatus = 'pending' | 'kick-off' | 'implementation' | 'live' | 'on-hold' | 'canceled'
-
-type Order = {
-  id: string
-  customerName: string
-  billingContact: {
-    name: string
-    email: string
-    address: string
-  }
-  term: 'monthly' | '1-year' | '2-year'
-  startDate: string
-  endDate: string
-  products: Array<{
-    name: string
-    units: number
-    pricePerUnit: number
-  }>
-  oneTimeFee: number
-  accountExecutive: string
-  status: OrderStatus
-  totalValue: number
-  orderDate: string
-  notes?: string
+type OrderWithRelations = Order & {
+  customer: Customer
+  products: (OrderProduct & {
+    product: Product
+  })[]
 }
 
-// This will be replaced with actual data from your backend
-const demoOrders: Order[] = [
-  {
-    id: '1',
-    customerName: 'Acme Corp',
-    billingContact: {
-      name: 'Jane Smith',
-      email: 'jane@acme.com',
-      address: '123 Billing St, City, State 12345'
-    },
-    term: '1-year',
-    startDate: '2024-03-01',
-    endDate: '2025-02-28',
-    products: [
-      {
-        name: 'Basic Plan',
-        units: 100,
-        pricePerUnit: 99.99
-      }
-    ],
-    oneTimeFee: 499.99,
-    accountExecutive: 'Bob Wilson',
-    status: 'live',
-    totalValue: 10498.99,
-    orderDate: '2024-02-15',
-    notes: 'Priority implementation requested'
-  }
-]
-
-const statusColors: Record<OrderStatus, string> = {
-  pending: 'text-yellow-600',
-  'kick-off': 'text-blue-600',
-  implementation: 'text-purple-600',
-  live: 'text-green-600',
-  'on-hold': 'text-orange-600',
-  canceled: 'text-red-600'
+interface OrdersTableProps {
+  orders: OrderWithRelations[]
 }
 
-export function OrdersTable() {
+export function OrdersTable({ orders }: OrdersTableProps) {
+  const router = useRouter()
+  const [sortField, setSortField] = useState<keyof OrderWithRelations>('orderDate')
+  const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('desc')
+
+  const formatDate = (date: Date) => {
+    return new Date(date).toLocaleDateString()
+  }
+
+  const calculateTotal = (order: OrderWithRelations) => {
+    const productsTotal = order.products.reduce((sum, item) => {
+      return sum + (item.units * item.pricePerUnit)
+    }, 0)
+    return productsTotal + order.oneTimeFee
+  }
+
+  const statusColors: Record<string, string> = {
+    pending: 'text-yellow-600',
+    'kick-off': 'text-blue-600',
+    implementation: 'text-purple-600',
+    live: 'text-green-600',
+    'on-hold': 'text-orange-600',
+    canceled: 'text-red-600'
+  }
+
+  const sortedOrders = [...orders].sort((a, b) => {
+    if (sortField === 'orderDate') {
+      return sortDirection === 'asc' 
+        ? a.orderDate.getTime() - b.orderDate.getTime()
+        : b.orderDate.getTime() - a.orderDate.getTime()
+    }
+    return 0
+  })
+
   return (
-    <div className="rounded-md border">
+    <div>
       <Table>
         <TableHeader>
           <TableRow>
+            <TableHead onClick={() => {/* sorting logic */}}>Order Date</TableHead>
             <TableHead>Customer</TableHead>
-            <TableHead>Order Date</TableHead>
-            <TableHead>Term</TableHead>
-            <TableHead>Status</TableHead>
-            <TableHead>AE</TableHead>
+            <TableHead>Account Executive</TableHead>
             <TableHead>Total Value</TableHead>
-            <TableHead className="text-right">Actions</TableHead>
+            <TableHead>Status</TableHead>
+            <TableHead>Actions</TableHead>
           </TableRow>
         </TableHeader>
         <TableBody>
-          {demoOrders.map((order) => (
-            <TableRow key={order.id}>
-              <TableCell>{order.customerName}</TableCell>
-              <TableCell>{new Date(order.orderDate).toLocaleDateString()}</TableCell>
-              <TableCell className="capitalize">{order.term}</TableCell>
-              <TableCell>
-                <span className={`capitalize ${statusColors[order.status]}`}>
-                  {order.status}
-                </span>
-              </TableCell>
-              <TableCell>{order.accountExecutive}</TableCell>
-              <TableCell>${order.totalValue.toLocaleString()}</TableCell>
-              <TableCell className="text-right">
-                <Link href={`/orders/${order.id}/edit`}>
-                  <Button variant="outline" size="sm">
-                    Edit
-                  </Button>
-                </Link>
+          {orders.length === 0 ? (
+            <TableRow>
+              <TableCell colSpan={6} className="text-center py-8">
+                No orders found
               </TableCell>
             </TableRow>
-          ))}
+          ) : (
+            sortedOrders.map((order) => (
+              <TableRow key={order.id}>
+                <TableCell>{formatDate(order.orderDate)}</TableCell>
+                <TableCell>{order.customer.companyName}</TableCell>
+                <TableCell>{order.accountExecutive}</TableCell>
+                <TableCell>${calculateTotal(order).toFixed(2)}</TableCell>
+                <TableCell>
+                  <span className={`capitalize ${statusColors[order.status]}`}>
+                    {order.status}
+                  </span>
+                </TableCell>
+                <TableCell>
+                  <Button
+                    variant="outline"
+                    onClick={() => router.push(`/orders/${order.id}/edit`)}
+                  >
+                    Edit
+                  </Button>
+                </TableCell>
+              </TableRow>
+            ))
+          )}
         </TableBody>
       </Table>
     </div>

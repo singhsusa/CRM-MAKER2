@@ -1,8 +1,11 @@
-import { OrdersTable } from "./components/orders-table"
+import { orderRepository } from '@/lib/repositories/order.repository'
+import { OrdersTable } from './components/orders-table'
 import { Button } from "@/components/ui/button"
 import Link from "next/link"
 
-export default function OrdersPage() {
+export default async function OrdersPage() {
+  const orders = await orderRepository.findAll()
+
   return (
     <div className="space-y-6">
       <div className="flex justify-between items-center">
@@ -11,7 +14,7 @@ export default function OrdersPage() {
           <Button>Create Order</Button>
         </Link>
       </div>
-      <OrdersTable />
+      <OrdersTable orders={orders} />
     </div>
   )
 } 

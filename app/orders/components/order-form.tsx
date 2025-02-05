@@ -147,6 +147,61 @@ export function OrderForm({ order }: OrderFormProps) {
     }, 0)
   }
 
+  // Add this helper function for term-based end date calculation
+  const calculateEndDate = (startDate: string, term: string): string => {
+    const start = new Date(startDate)
+    const end = new Date(start)
+    
+    switch (term) {
+      case 'monthly':
+        end.setMonth(end.getMonth() + 1)
+        break
+      case '1-year':
+        end.setFullYear(end.getFullYear() + 1)
+        break
+      case '2-year':
+        end.setFullYear(end.getFullYear() + 2)
+        break
+    }
+    
+    return end.toISOString().split('T')[0]
+  }
+
+  // Update the term handler to auto-calculate end date
+  const handleTermChange = (value: string) => {
+    setFormData(prev => ({
+      ...prev,
+      term: value,
+      endDate: prev.startDate ? calculateEndDate(prev.startDate, value) : prev.endDate
+    }))
+  }
+
+  // Update start date handler to recalculate end date
+  const handleStartDateChange = (value: string) => {
+    setFormData(prev => ({
+      ...prev,
+      startDate: value,
+      endDate: value ? calculateEndDate(value, prev.term) : prev.endDate
+    }))
+  }
+
+  // Add product selection handler with auto price
+  const handleProductSelect = (productId: string, orderProductId: string) => {
+    const selectedProduct = products.find(p => p.id === productId)
+    if (selectedProduct) {
+      setOrderProducts(prev => prev.map(p => {
+        if (p.id === orderProductId) {
+          return {
+            ...p,
+            productId,
+            pricePerUnit: selectedProduct.price
+          }
+        }
+        return p
+      }))
+    }
+  }
+
   const onSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     setLoading(true)
@@ -211,7 +266,7 @@ export function OrderForm({ order }: OrderFormProps) {
       toast({
         variant: "destructive",
         title: "Error",
-        description: "Failed to create order",
+        description: error instanceof Error ? error.message : "Failed to create order",
       })
     } finally {
       setLoading(false)
@@ -278,7 +333,7 @@ export function OrderForm({ order }: OrderFormProps) {
           <Label htmlFor="term">Order Term</Label>
           <Select
             value={formData.term}
-            onValueChange={(value) => updateField('term', value)}
+            onValueChange={handleTermChange}
           >
             <SelectTrigger>
               <SelectValue placeholder="Select term" />
@@ -298,7 +353,7 @@ export function OrderForm({ order }: OrderFormProps) {
               id="startDate" 
               type="date" 
               value={formData.startDate}
-              onChange={(e) => updateField('startDate', e.target.value)}
+              onChange={(e) => handleStartDateChange(e.target.value)}
               required 
             />
           </div>
@@ -341,15 +396,15 @@ export function OrderForm({ order }: OrderFormProps) {
                 <Label>Product {index + 1}</Label>
                 <Select
                   value={product.productId}
-                  onValueChange={(value) => updateProduct(product.id, 'productId', value)}
+                  onValueChange={(value) => handleProductSelect(value, product.id)}
                 >
                   <SelectTrigger>
                     <SelectValue placeholder="Select product" />
                   </SelectTrigger>
                   <SelectContent>
-                    {products.map((product) => (
-                      <SelectItem key={product.id} value={product.id}>
-                        {product.name} - ${product.price}
+                    {products.map((p) => (
+                      <SelectItem key={p.id} value={p.id}>
+                        {p.name} - ${p.price}
                       </SelectItem>
                     ))}
                   </SelectContent>

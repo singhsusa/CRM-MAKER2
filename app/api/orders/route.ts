@@ -1,6 +1,19 @@
 import { NextResponse } from 'next/server'
 import { orderRepository } from '@/lib/repositories/order.repository'
 
+export async function GET() {
+  try {
+    const orders = await orderRepository.findAll()
+    return NextResponse.json(orders)
+  } catch (error) {
+    console.error('Error fetching orders:', error)
+    return NextResponse.json(
+      { error: 'Failed to fetch orders' },
+      { status: 500 }
+    )
+  }
+}
+
 export async function POST(request: Request) {
   try {
     const data = await request.json()
